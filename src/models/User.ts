@@ -13,6 +13,11 @@ const userSchema = new Schema<IUser>(
       type: String,
       unique: true,
       required: true,
+      lowercase: true,
+      validate: {
+        validator: (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),
+        message: (props: any) => `${props.value} is not a valid email!`,
+      },
     },
     passwordHash: {
       type: String,
@@ -29,9 +34,11 @@ const userSchema = new Schema<IUser>(
     },
     isVerified: {
       type: Boolean,
+      default: false,
     },
     isAcceptingMessage: {
       type: Boolean,
+      default: true,
     },
   },
   { timestamps: true },
