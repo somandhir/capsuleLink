@@ -1,8 +1,10 @@
+import { Types } from "mongoose";
+
 export type MessageType = "normal" | "delayed";
 
 export interface IMessage {
   _id?: string;
-  receiverId: string;
+  receiverId: Types.ObjectId | string;
   type: MessageType;
   senderName: string;
   content: string;
@@ -13,7 +15,7 @@ export interface IMessage {
 
 export interface ITestimonial {
   _id?: string;
-  receiverId: string;
+  receiverId: Types.ObjectId | string;
   product: string;
   senderName: string;
   content: string;
