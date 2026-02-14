@@ -27,7 +27,7 @@ const userSchema = new Schema<IUser>(
       type: String,
     },
     verificationCode: {
-      type: Number,
+      type: String,
     },
     codeExpiry: {
       type: Date,

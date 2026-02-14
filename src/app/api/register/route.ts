@@ -1,4 +1,5 @@
 import { ApiError, ApiResponse } from "@/helpers/apiUtils";
+import { sendVerificationEmail } from "@/helpers/sendVerificationEmail";
 import dbConnect from "@/lib/dbConnect";
 import User from "@/models/User";
 import bcrypt from "bcryptjs";
@@ -10,11 +11,11 @@ export async function POST(req: Request) {
   try {
     const { username, email, password } = await req.json();
 
-    //  VALIDATION 
+    //  VALIDATION
     if (password.length < 6) {
       return NextResponse.json(
         new ApiResponse(400, {}, "Password must be at least 6 characters"),
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -24,9 +25,9 @@ export async function POST(req: Request) {
         new ApiResponse(
           400,
           {},
-          "Invalid username. Only lowercase letters, numbers, _ and . are allowed, cannot start or end with _ or ."
+          "Invalid username. Only lowercase letters, numbers, _ and . are allowed, cannot start or end with _ or .",
         ),
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -34,13 +35,13 @@ export async function POST(req: Request) {
     if (!emailRegex.test(email)) {
       return NextResponse.json(
         new ApiResponse(400, {}, "Invalid email format"),
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // ----- EXISTING USER CHECK -----
     const existingUser = await User.findOne({ $or: [{ username }, { email }] });
-    const verifyCode = Math.floor(100000 + Math.random() * 900000);
+    const verifyCode = Math.floor(100000 + Math.random() * 900000).toString();
 
     if (existingUser) {
       if (existingUser.isVerified) {
@@ -50,9 +51,9 @@ export async function POST(req: Request) {
           new ApiResponse(
             400,
             {},
-            `A verified user with given ${conflictField} already exists`
+            `A verified user with given ${conflictField} already exists`,
           ),
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -65,16 +66,31 @@ export async function POST(req: Request) {
 
       await existingUser.save();
 
+      const emailResponse = await sendVerificationEmail(
+        email,
+        username,
+        verifyCode,
+      );
+      if (!emailResponse.success) {
+        return Response.json(
+          {
+            success: false,
+            message: emailResponse.message,
+          },
+          { status: 500 },
+        );
+      }
+
       return NextResponse.json(
         new ApiResponse(
           200,
           { userId: existingUser._id },
-          "User updated, verify your account"
+          "User updated, verify your account",
         ),
-        { status: 200 }
+        { status: 200 },
       );
     } else {
-      // CREATE NEW USER 
+      // CREATE NEW USER
       const hashedPassword = await bcrypt.hash(password, 10);
       const newUser = await User.create({
         username: username.toLowerCase(),
@@ -84,20 +100,34 @@ export async function POST(req: Request) {
         codeExpiry: new Date(Date.now() + 3600000),
       });
 
+      const emailResponse = await sendVerificationEmail(
+        email,
+        username,
+        verifyCode,
+      );
+      if (!emailResponse.success) {
+        return Response.json(
+          {
+            success: false,
+            message: emailResponse.message,
+          },
+          { status: 500 },
+        );
+      }
+
       return NextResponse.json(
         new ApiResponse(
           201,
           { userId: newUser._id },
-          "User created, verify your account"
+          "User created, verify your account",
         ),
-        { status: 201 }
+        { status: 201 },
       );
     }
   } catch (error: any) {
     console.log("Error in register controller: ", error);
-    return NextResponse.json(
-      new ApiError(500, "Internal server error"),
-      { status: 500 }
-    );
+    return NextResponse.json(new ApiError(500, "Internal server error"), {
+      status: 500,
+    });
   }
 }

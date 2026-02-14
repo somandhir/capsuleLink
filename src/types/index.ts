@@ -30,8 +30,8 @@ export interface IUser {
   email: string;
   passwordHash: string;
   avatar: string;
-  verificationCode: number;
-  codeExpiry: Date;
+  verificationCode?: string;
+  codeExpiry?: Date;
   isVerified: boolean;
   isAcceptingMessage: boolean;
   createdAt: Date;
