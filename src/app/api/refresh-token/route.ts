@@ -47,6 +47,6 @@ export async function POST(req: Request) {
     console.error("Refresh Token Error:", error);
     return NextResponse.json(new ApiError(500, "Internal server error"), {
       status: 500,
-    });
+    }); 
   }
 }
