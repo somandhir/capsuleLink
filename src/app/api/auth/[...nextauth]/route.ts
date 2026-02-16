@@ -2,6 +2,8 @@ import NextAuth, { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import { MongoDBAdapter } from "@auth/mongodb-adapter";
 import clientPromise from "@/lib/mongodb";
+import dbConnect from "@/lib/dbConnect";
+import User from "@/models/User";
 
 export const authOptions: NextAuthOptions = {
   adapter: MongoDBAdapter(clientPromise),
@@ -12,15 +14,42 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   session: {
-    strategy: "jwt", // Use JWTs for sessions
+    strategy: "jwt", 
   },
   callbacks: {
     async signIn({ user, account }) {
       if (account?.provider === "google") {
-        // Here, NextAuth has already created/found the user in MongoDB via the adapter.
-        // You can add logic here to mark them as verified immediately.
-        return true;
+        if (!user.email) return false;
+
+        await dbConnect();
+
+        const existingUser = await User.findOne({ email: user.email });
+
+        if (!existingUser) {
+          const baseUsername = user.email.split("@")[0];
+
+          let username = baseUsername;
+          let counter = 1;
+
+          while (await User.findOne({ username })) {
+            username = `${baseUsername}${counter}`;
+            counter++;
+          }
+
+          await User.create({
+            username,
+            email: user.email,
+            isVerified: true,
+            isAcceptingMessage: true,
+          });
+        } else {
+          if (!existingUser.isVerified) {
+            existingUser.isVerified = true;
+            await existingUser.save();
+          }
+        }
       }
+
       return true;
     },
     async jwt({ token, user, account }) {

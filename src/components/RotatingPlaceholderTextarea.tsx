@@ -34,6 +34,7 @@ export function RotatingPlaceholderTextarea({ value, onChange }: Props) {
     "Drop lore. We love lore. 📜🧙‍♂️",
     "Main character moment — go 🧍‍♂️✨",
   ];
+  const [placeholder, setPlaceholder] = useState("");
 
   const [index, setIndex] = useState(0);
   const [visible, setVisible] = useState(true);
@@ -50,6 +51,7 @@ export function RotatingPlaceholderTextarea({ value, onChange }: Props) {
           while (next === prev && placeholders.length > 1) {
             next = Math.floor(Math.random() * placeholders.length);
           }
+          setPlaceholder(placeholders[next]);
           return next;
         });
         setVisible(true);
@@ -72,13 +74,13 @@ export function RotatingPlaceholderTextarea({ value, onChange }: Props) {
       {!value && (
         <div
           className={`
-            absolute left-3 top-3 pointer-events-none
+            absolute left-3 top-2 pointer-events-none
             transition-all duration-300 ease-out
             ${visible ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2"}
             text-gray-400
           `}
         >
-          {placeholders[index]}
+          {placeholder}
         </div>
       )}
     </div>
