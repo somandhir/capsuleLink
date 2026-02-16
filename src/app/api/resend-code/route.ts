@@ -1,15 +1,23 @@
 import { ApiError, ApiResponse } from "@/helpers/apiUtils";
 import { sendVerificationEmail } from "@/helpers/sendVerificationEmail";
+import dbConnect from "@/lib/dbConnect";
 import { redis } from "@/lib/redis";
 import User from "@/models/User";
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   try {
-    const { userId } = await req.json();
-    const user = await User.findById(userId);
+    dbConnect()
+    const { username } = await req.json();
+    const user = await User.findOne({ username });
+    if (!user) {
+      return Response.json({ message: "User not found" }, { status: 404 });
+    }
+    if (user.isVerified) {
+      return Response.json({ message: "Account already verified" }, { status: 400 });
+    }
 
-    const redisKey = `resend-cooldown:${userId}`;
+    const redisKey = `resend-cooldown:${username}`;
     const isLocked = await redis.get(redisKey);
 
     if (isLocked) {
@@ -55,7 +63,7 @@ export async function POST(req: Request) {
       new ApiResponse(200, {}, "verification code sent successfully"),
     );
   } catch (error) {
-    console.log("error in resend-code route");
+    console.log("error in resend-code route ", error);
     return NextResponse.json(new ApiError(500, "internal server error"), {
       status: 500,
     });

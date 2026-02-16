@@ -7,10 +7,9 @@ export async function POST(req: Request) {
   try {
     await dbConnect();
 
-    const { userId, code } = await req.json();
+    const { username, code } = await req.json();
 
-    const user = await User.findById(userId);
-
+    const user = await User.findOne({ username });
     if (!user) {
       return NextResponse.json(
         new ApiResponse(404, {}, "user with the given username doesn't exist"),
