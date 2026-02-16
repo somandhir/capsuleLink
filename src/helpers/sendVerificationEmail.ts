@@ -14,7 +14,10 @@ export async function sendVerificationEmail(
       subject: "Capsule Link | Verification code",
       react: VerificationEmail({ username, otp: verifyCode }),
     });
-
+    if (error) {
+      console.error("Resend API Error:", error);
+      return new ApiResponse(500, error, "Failed to send email");
+    }
     return new ApiResponse(200, data, "Verification email sent successfully");
   } catch (emailError) {
     console.error("error sending verification email ", emailError);

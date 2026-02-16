@@ -10,7 +10,8 @@ export async function POST(
 ) {
   try {
     await dbConnect();
-    const { username } = params;
+    const { username } = await params;
+    console.log(username)
     const user = await User.findOne({ username });
     if (!user) {
       return NextResponse.json(new ApiResponse(404, {}, "User not found"), {

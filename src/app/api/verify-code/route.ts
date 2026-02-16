@@ -7,9 +7,15 @@ export async function POST(req: Request) {
   try {
     await dbConnect();
 
-    const { username, code } = await req.json();
+    const { identifier, code } = await req.json();
 
-    const user = await User.findOne({ username });
+    // Find user by either username OR email
+    const user = await User.findOne({
+      $or: [
+        { username: identifier },
+        { email: identifier }
+      ]
+    });
     if (!user) {
       return NextResponse.json(
         new ApiResponse(404, {}, "user with the given username doesn't exist"),

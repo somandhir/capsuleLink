@@ -8,16 +8,25 @@ import { NextResponse } from "next/server";
 export async function POST(req: Request) {
   try {
     dbConnect()
-    const { username } = await req.json();
-    const user = await User.findOne({ username });
+    const body = await req.json();
+
+    const identifier = decodeURIComponent(body.identifier);
+    const user = await User.findOne({
+      $or: [{ email: identifier }, { username: identifier }],
+    });
+
     if (!user) {
-      return Response.json({ message: "User not found" }, { status: 404 });
+      console.log(identifier)
+      return NextResponse.json(
+        new ApiResponse(404, {}, "User not found"),
+        { status: 404 }
+      );
     }
     if (user.isVerified) {
       return Response.json({ message: "Account already verified" }, { status: 400 });
     }
 
-    const redisKey = `resend-cooldown:${username}`;
+    const redisKey = `resend-cooldown:${identifier}`;
     const isLocked = await redis.get(redisKey);
 
     if (isLocked) {

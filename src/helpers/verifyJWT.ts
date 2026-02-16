@@ -1,7 +1,8 @@
 import jwt, { JwtPayload } from "jsonwebtoken";
 
 interface CustomJwtPayload extends JwtPayload {
-  id: string;
+  _id?: string;
+  id?: string;
 }
 
 export const verifyJWT = (req: Request): CustomJwtPayload | null => {

@@ -73,9 +73,9 @@ export default function VerifyPage() {
     const toastId = toast.loading("Resending code...");
 
     try {
-      const res = await axios.post("/api/resend-code", { username });
+      const res = await axios.post("/api/resend-code", { identifier: username });
       toast.success(res.data.message || "New code sent to your email", { id: toastId });
-      setTimer(60); 
+      setTimer(60);
     } catch (error) {
       const err = error as AxiosError<{ message: string }>;
       toast.error(err.response?.data?.message || "Wait before resending", {
