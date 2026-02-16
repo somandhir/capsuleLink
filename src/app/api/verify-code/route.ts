@@ -8,7 +8,7 @@ export async function POST(req: Request) {
     await dbConnect();
 
     const { identifier, code } = await req.json();
-
+    console.log("identifier : ",identifier)
     // Find user by either username OR email
     const user = await User.findOne({
       $or: [

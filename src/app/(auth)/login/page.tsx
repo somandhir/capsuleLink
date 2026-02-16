@@ -42,7 +42,7 @@ export default function LoginPage() {
 
         try {
             const res = await axios.post("/api/login", {
-                email: data.identifier, 
+                identifier: data.identifier, 
                 password: data.password,
             });
 
@@ -142,6 +142,7 @@ export default function LoginPage() {
                     <p className="mt-6 text-center text-sm text-gray-500">
                         Don't have an account?{" "}
                         <button
+                        suppressHydrationWarning
                             onClick={() => router.push("/sign-up")}
                             className="text-black font-semibold hover:underline"
                         >

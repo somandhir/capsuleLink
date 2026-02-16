@@ -8,8 +8,14 @@ import dbConnect from "@/lib/dbConnect";
 export async function POST(req: Request) {
   try {
     await dbConnect();
-    const { email, password } = await req.json();
-    const user = await User.findOne({ email });
+    const { identifier, password } = await req.json();
+    console.log("identifier: ",identifier);
+    const user = await User.findOne({
+      $or: [
+        { username: identifier },
+        { email: identifier }
+      ]
+    }); 
     if (!user) {
       return NextResponse.json(
         new ApiResponse(403, {}, "invalid credentials"),

@@ -25,8 +25,7 @@ type FormValues = z.infer<typeof verifySchema>;
 export default function VerifyPage() {
   const router = useRouter();
   const params = useParams();
-  const username = params.username as string;
-
+  const username = params?.username as string;
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [timer, setTimer] = useState(0);
@@ -49,10 +48,14 @@ export default function VerifyPage() {
   const onSubmit = async (data: FormValues) => {
     setLoading(true);
     const toastId = toast.loading("Verifying your account...");
+console.log("hellooo");
+  const username = params?.username?.toString();
+
 
     try {
+      console.log(username, data.code)
       const res = await axios.post("/api/verify-code", {
-        username,
+        identifier : username,
         code: data.code,
       });
 
