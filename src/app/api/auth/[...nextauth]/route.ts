@@ -102,7 +102,6 @@ export const authOptions: NextAuthOptions = {
         }
       }
 
-      // Allow credentials login to proceed
       return true;
     },
     async jwt({ token, user }) {

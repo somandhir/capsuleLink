@@ -11,7 +11,8 @@ import {
   Clock,
   Link as LinkIcon,
   Loader2,
-  ExternalLink
+  ExternalLink,
+  Trash2
 } from "lucide-react";
 import { toast } from "sonner";
 import axios from "axios";
@@ -157,6 +158,21 @@ export default function Dashboard() {
     toast.success("Capsule Link copied!");
   };
 
+  const handleDelete = async (messageId: string) => {
+    if (!confirm("Are you sure you want to delete this capsule?")) return;
+
+    try {
+      const res = await axios.delete(`/api/message/delete/${messageId}`);
+      if (res.data.success) {
+        toast.success("Capsule destroyed!");
+        // 🔄 Refresh the messages list
+        fetchMessages(activeTab);
+      }
+    } catch (error) {
+      toast.error("Failed to delete message");
+    }
+  };
+
   if (!mounted || status === "loading") {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
@@ -224,7 +240,7 @@ export default function Dashboard() {
 
           <Button
             onClick={copyLink}
-            className="bg-black text-white hover:bg-neutral-800 rounded-2xl px-8 h-[46px] transition-all active:scale-95"
+            className="bg-black cursor-pointer text-white hover:bg-neutral-800 rounded-2xl px-8 h-[46px] transition-all active:scale-95"
           >
             <Copy className="w-4 h-4 mr-2" />
             Copy Link
@@ -299,8 +315,18 @@ export default function Dashboard() {
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.9 }}
-                  className="group p-6 bg-white border border-neutral-200 rounded-3xl shadow-sm hover:shadow-md hover:border-neutral-300 transition-all flex flex-col justify-between min-h-[180px]"
+                  className="group p-6 relative bg-white border border-neutral-200 rounded-3xl shadow-sm hover:shadow-md hover:border-neutral-300 transition-all flex flex-col justify-between min-h-[180px]"
                 >
+
+
+                  <button
+                    onClick={() => handleDelete(msg._id)}
+                    className="absolute top-4 right-4 p-2 bg-white/80 hover:bg-red-50 text-neutral-400 hover:text-red-600 rounded-xl cursor-pointer border border-transparent hover:border-red-100 transition-all z-30 opacity-0 group-hover:opacity-100 focus:opacity-100"
+                    title="Delete Message"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+
                   <p
                     className={`text-gray-800 text-sm md:text-base leading-relaxed font-medium italic transition-all duration-300
     ${locked ? "blur-sm select-none" : ""}
@@ -310,7 +336,6 @@ export default function Dashboard() {
                   </p>
 
                   <div className="mt-6">
-                    {/* 👤 SENDER NAME SECTION */}
                     <div className="mb-3 flex items-end gap-2">
                       <div className="h-px flex-grow bg-neutral-100" />
                       <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest bg-white px-2">
