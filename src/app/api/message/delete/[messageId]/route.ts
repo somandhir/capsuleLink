@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 
 export async function DELETE(
   req: Request,
-  { params }: { params: { messageId: string } }
+  { params }: { params:Promise<{ messageId: string }>}
 ) {
   try {
     await dbConnect();
