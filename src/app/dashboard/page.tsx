@@ -321,7 +321,11 @@ export default function Dashboard() {
 
                   <button
                     onClick={() => handleDelete(msg._id)}
-                    className="absolute top-4 right-4 p-2 bg-white/80 hover:bg-red-50 text-neutral-400 hover:text-red-600 rounded-xl cursor-pointer border border-transparent hover:border-red-100 transition-all z-30 opacity-0 group-hover:opacity-100 focus:opacity-100"
+                    className=" cursor-pointer absolute top-4 right-4 p-2 bg-white/80 rounded-xl border z-30 transition-all
+                        opacity-100 text-red-500 border-neutral-100   hover:hover:opacity-0  hover:hover:group-hover:opacity-100  hover:hover:text-neutral-400 
+                        hover:hover:hover:text-red-600 
+                        hover:hover:border-transparent 
+                        hover:hover:hover:border-red-100"
                     title="Delete Message"
                   >
                     <Trash2 className="w-4 h-4" />
