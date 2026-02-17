@@ -19,7 +19,14 @@ import axios from "axios";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 const TABS = [
   { id: "normal", label: "Normal", icon: Inbox, api: "/api/message/n" },
   { id: "delayed", label: "Delayed", icon: Clock, api: "/api/message/d" },
@@ -40,6 +47,9 @@ export default function Dashboard() {
   const [updatingAccept, setUpdatingAccept] = useState(false);
 
   const [counts, setCounts] = useState({ normal: 0, delayed: 0 });
+
+  const [selectedMessage, setSelectedMessage] = useState<any>(null);
+  const [isViewOpen, setIsViewOpen] = useState(false);
 
 
   useEffect(() => {
@@ -156,6 +166,20 @@ export default function Dashboard() {
     }
     navigator.clipboard.writeText(profileUrl);
     toast.success("Capsule Link copied!");
+  };
+
+  const openMessage = async (msgId: string) => {
+    try {
+      const res = await axios.get(`/api/message/get/${msgId}`);
+      if (res.data.success) {
+        setSelectedMessage(res.data.data);
+        setIsViewOpen(true);
+        fetchMessages(activeTab);
+      }
+    } catch (error) {
+      console.log("error in opening message : ", error)
+      toast.error("Could not open capsule");
+    }
   };
 
   const handleDelete = async (messageId: string) => {
@@ -307,6 +331,10 @@ export default function Dashboard() {
             messages.map((msg: any) => {
               const locked = activeTab === "delayed" && !msg.isUnlocked;
 
+              const previewContent = msg.content.length > 20
+                ? msg.content.slice(0, 20) + "..."
+                : msg.content;
+
               return (
 
                 <motion.div
@@ -315,37 +343,65 @@ export default function Dashboard() {
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.9 }}
-                  className="group p-6 relative bg-white border border-neutral-200 rounded-3xl shadow-sm hover:shadow-md hover:border-neutral-300 transition-all flex flex-col justify-between min-h-[180px]"
+                  onClick={() => !locked && openMessage(msg._id)}
+                  className={`
+                  cursor-pointer group p-6 relative bg-white border border-neutral-200 rounded-3xl shadow-sm hover:shadow-md hover:border-neutral-300 transition-all flex flex-col justify-between min-h-[180px] 
+                 ${locked ? "cursor-not-allowed" : "hover:scale-[1.02]"}
+                  `}
                 >
 
 
-                  <button
-                    onClick={() => handleDelete(msg._id)}
-                    className=" cursor-pointer absolute top-4 right-4 p-2 bg-white/80 rounded-xl border z-30 transition-all
-                        opacity-100 text-red-500 border-neutral-100   hover:hover:opacity-0  hover:hover:group-hover:opacity-100  hover:hover:text-neutral-400 
-                        hover:hover:hover:text-red-600 
-                        hover:hover:border-transparent 
-                        hover:hover:hover:border-red-100"
-                    title="Delete Message"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <button
+                        className="absolute top-4 right-4 p-2 bg-white/80 rounded-xl border z-30 transition-all
+        opacity-100 text-red-500 border-neutral-100 
+        hover:hover:opacity-0 
+        hover:hover:group-hover:opacity-100 
+        hover:hover:text-neutral-400 
+        hover:hover:hover:text-red-600 
+        hover:hover:border-transparent 
+        hover:hover:hover:border-red-100"
+                        title="Delete Message"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </AlertDialogTrigger>
+
+                    <AlertDialogContent className="rounded-3xl border-none shadow-2xl">
+                      <AlertDialogHeader>
+                        <AlertDialogTitle className="text-xl font-bold">Destroy this capsule?</AlertDialogTitle>
+                        <AlertDialogDescription className="text-neutral-500">
+                          This action cannot be undone. This message will be permanently removed from our servers.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter className="gap-2 sm:gap-0">
+                        <AlertDialogCancel className="rounded-2xl border-neutral-200">Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => handleDelete(msg._id)}
+                          className="bg-red-600 hover:bg-red-700 text-white rounded-2xl transition-all active:scale-95"
+                        >
+                          Delete Forever
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
 
                   <p
                     className={`text-gray-800 text-sm md:text-base leading-relaxed font-medium italic transition-all duration-300
-    ${locked ? "blur-sm select-none" : ""}
-    `}
+                    ${locked ? "blur-sm select-none" : ""}
+                   `}
                   >
-                    "{msg.content}"
+                    {previewContent}
                   </p>
 
                   <div className="mt-6">
                     <div className="mb-3 flex items-end gap-2">
-                      <div className="h-px flex-grow bg-neutral-100" />
+                      <div className="h-px grow bg-neutral-100" />
                       <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest bg-white px-2">
                         From: {msg.senderName || "Anonymous"}
                       </span>
-                      <div className="h-px flex-grow bg-neutral-100" />
+                      <div className="h-px grow bg-neutral-100" />
                     </div>
 
                     <div className="flex justify-between items-center">
@@ -390,6 +446,49 @@ export default function Dashboard() {
           )}
         </AnimatePresence>
       </div>
+      <Dialog open={isViewOpen} onOpenChange={setIsViewOpen}>
+        <DialogContent className="sm:max-w-[500px] rounded-3xl p-0 overflow-hidden border-none shadow-2xl">
+
+          {/* 1. Add DialogHeader with Title and Description for Accessibility */}
+          <DialogHeader className="sr-only">
+            <DialogTitle>Message from {selectedMessage?.senderName || "Anonymous"}</DialogTitle>
+            <DialogDescription>Viewing your anonymous capsule content.</DialogDescription>
+          </DialogHeader>
+
+          <div className="bg-gradient-to-b from-neutral-50 to-white p-8">
+            {/* 2. Your existing Vibe UI logic starts here */}
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-[0.2em]">
+                  Capsule Content
+                </span>
+                <h2 className="text-xl font-bold text-neutral-900">
+                  From {selectedMessage?.senderName || "Anonymous"}
+                </h2>
+              </div>
+              <div className="bg-neutral-100 px-3 py-1 rounded-full text-[10px] font-bold">
+                {selectedMessage?.type === 'normal' ? 'INSTANT' : 'TIME-DELAYED'}
+              </div>
+            </div>
+
+            <p className="text-lg text-neutral-800 leading-relaxed font-medium italic mb-8">
+              "{selectedMessage?.content}"
+            </p>
+
+            <div className="flex items-center gap-4 text-neutral-500 text-xs border-t pt-6">
+              <div className="flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5" />
+                {new Date(selectedMessage?.createdAt).toLocaleDateString()}
+              </div>
+              {selectedMessage?.type === 'delayed' && (
+                <div className="text-amber-600 font-semibold">
+                  Unlocked on {new Date(selectedMessage?.unlockDate).toLocaleDateString()}
+                </div>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
