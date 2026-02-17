@@ -1,95 +1,128 @@
 import NextAuth, { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
-import { MongoDBAdapter } from "@auth/mongodb-adapter";
+import CredentialsProvider from "next-auth/providers/credentials";
 import clientPromise from "@/lib/mongodb";
 import dbConnect from "@/lib/dbConnect";
 import User from "@/models/User";
+import bcrypt from "bcryptjs";
 
 export const authOptions: NextAuthOptions = {
-  adapter: MongoDBAdapter(clientPromise),
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       allowDangerousEmailAccountLinking: true,
     }),
+    CredentialsProvider({
+      id: "credentials",
+      name: "Credentials",
+      credentials: {
+        identifier: { label: "Email/Username", type: "text" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(credentials): Promise<any> {
+        await dbConnect();
+        try {
+          const user = await User.findOne({
+            $or: [
+              { email: credentials?.identifier },
+              { username: credentials?.identifier },
+            ],
+          });
+
+          if (!user) throw new Error("No user found with this identifier");
+          if (!user.isVerified) throw new Error("not verified");
+
+          const isPasswordCorrect = await bcrypt.compare(
+            credentials!.password,
+            user.passwordHash!
+          );
+
+          if (!isPasswordCorrect) throw new Error("Incorrect password");
+
+          return {
+            _id: user._id.toString(),
+            username: user.username,
+            email: user.email,
+            isAcceptingMessage: user.isAcceptingMessage,
+          };
+        } catch (err: any) {
+          throw new Error(err.message);
+        }
+      },
+    }),
   ],
-  session: {
-    strategy: "jwt", 
-  },
+  session: { strategy: "jwt" },
   callbacks: {
     async signIn({ user, account }) {
       if (account?.provider === "google") {
-        if (!user.email) return false;
+        try {
+          await dbConnect();
 
-        await dbConnect();
-
-        const existingUser = await User.findOne({ email: user.email });
-
-        if (!existingUser) {
-          const baseUsername = user.email.split("@")[0];
-
-          let username = baseUsername;
-          let counter = 1;
-
-          while (await User.findOne({ username })) {
-            username = `${baseUsername}${counter}`;
-            counter++;
+          if (!user.email) {
+            console.error("Google sign-in failed: No email provided by Google");
+            return false;
           }
 
-          await User.create({
-            username,
-            email: user.email,
-            isVerified: true,
-            isAcceptingMessage: true,
-          });
-        } else {
-          if (!existingUser.isVerified) {
-            existingUser.isVerified = true;
-            await existingUser.save();
+          const existingUser = await User.findOne({ email: user.email });
+
+          if (!existingUser) {
+            const baseUsername = user.email.split("@")[0];
+            let username = baseUsername;
+            let counter = 1;
+
+            // Handle username collisions
+            while (await User.findOne({ username })) {
+              username = `${baseUsername}${counter++}`;
+            }
+
+            const newUser: any = await User.create({
+              username,
+              email: user.email,
+              isVerified: true,
+              isAcceptingMessage: true,
+              // ⚠️ Ensure 'passwordHash' isn't required in your Schema 
+              // or pass an undefined value explicitly
+            });
+
+            (user as any)._id = newUser._id.toString();
+            (user as any).username = newUser.username;
+            (user as any).isAcceptingMessage = newUser.isAcceptingMessage;
+          } else {
+            (user as any)._id = existingUser._id.toString();
+            (user as any).username = existingUser.username;
+            (user as any).isAcceptingMessage = existingUser.isAcceptingMessage;
           }
+
+          return true; // Successfully logged in
+        } catch (error) {
+          // 2. CHECK YOUR TERMINAL FOR THIS LOG
+          console.error("DETAILED_SIGNIN_ERROR:", error);
+          return false; // This triggers the 'AccessDenied' redirect
         }
       }
 
+      // Allow credentials login to proceed
       return true;
     },
-    async jwt({ token, user, account }) {
-      // The first time a user signs in, we can attach our custom data to the NextAuth JWT
+    async jwt({ token, user }) {
       if (user) {
-        // MongoDBAdapter provides user.id, not user._id
-        token._id = user.id;
-        console.log("JWT callback - setting token._id:", user.id);
+        token._id = (user as any)._id;
+        token.username = (user as any).username;
+        token.isAcceptingMessage = (user as any).isAcceptingMessage;
       }
       return token;
     },
     async session({ session, token }) {
-      // Make the user ID and username available in the frontend session
-      if (session.user && token._id) {
+      if (session.user) {
         (session.user as any)._id = token._id;
-        console.log("Session callback - token._id:", token._id);
-        
-        // Fetch the username from the database
-        try {
-          await dbConnect();
-          const user = await User.findById(token._id).select("username");
-          if (user) {
-            (session.user as any).username = user.username;
-            console.log("Session callback - found username:", user.username);
-          } else {
-            console.log("Session callback - user not found with id:", token._id);
-          }
-        } catch (error) {
-          console.log("Session callback - error fetching user:", error);
-        }
-      } else {
-        console.log("Session callback - missing session.user or token._id:", { 
-          hasSession: !!session.user, 
-          hasTokenId: !!token._id 
-        });
+        (session.user as any).username = token.username;
+        (session.user as any).isAcceptingMessage = token.isAcceptingMessage;
       }
       return session;
     },
   },
+  secret: process.env.NEXTAUTH_SECRET,
 };
 
 const handler = NextAuth(authOptions);

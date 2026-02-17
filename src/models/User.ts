@@ -21,7 +21,7 @@ const userSchema = new Schema<IUser>(
     },
     passwordHash: {
       type: String,
-      required: true,
+      required: false,
     },
     avatar: {
       type: String,
@@ -44,7 +44,4 @@ const userSchema = new Schema<IUser>(
   { timestamps: true },
 );
 
-const User =
-  (mongoose.models.User as mongoose.Model<IUser>) ||
-  mongoose.model<IUser>("User", userSchema);
-export default User;
+const User = (mongoose.models.User as mongoose.Model<IUser>) || mongoose.model<IUser>("User", userSchema);export default User;

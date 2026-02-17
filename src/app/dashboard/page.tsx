@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   RefreshCcw,
@@ -9,8 +10,8 @@ import {
   Inbox,
   Clock,
   Link as LinkIcon,
-  ShieldCheck,
-  ShieldOff
+  Loader2,
+  ExternalLink
 } from "lucide-react";
 import { toast } from "sonner";
 import axios from "axios";
@@ -20,214 +21,253 @@ import { Switch } from "@/components/ui/switch";
 
 const TABS = [
   { id: "normal", label: "Normal", icon: Inbox, api: "/api/message/n" },
-  { id: "delayed", label: "Delayed", icon: Clock, api: "/api/message/d" }
+  { id: "delayed", label: "Delayed", icon: Clock, api: "/api/message/d" },
 ];
 
 export default function Dashboard() {
   const { data: session, status } = useSession();
-
-  const [mounted, setMounted] = useState(false);
+  console.log(session, status);
+  const router = useRouter();
 
   const [activeTab, setActiveTab] = useState("normal");
-  const [messages, setMessages] = useState<any[]>([]);
-  const [counts, setCounts] = useState({ normal: 0, delayed: 0 });
-
-  const [loading, setLoading] = useState(true);
-
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [profileUrl, setProfileUrl] = useState("");
+  const [mounted, setMounted] = useState(false);
+
   const [accepting, setAccepting] = useState<boolean | null>(null);
   const [updatingAccept, setUpdatingAccept] = useState(false);
 
-  useEffect(() => setMounted(true), []);
+  const [counts, setCounts] = useState({ normal: 0, delayed: 0 });
 
-  // ✅ INIT USER DATA
+
   useEffect(() => {
-    if (status === "authenticated") {
-      const username = (session.user as any)?.username;
-
-      setProfileUrl(`${window.location.origin}/u/${username}`);
-      setAccepting((session.user as any)?.isAcceptingMessage);
+    setMounted(true);
+    console.log(status);
+    if (status === "unauthenticated") {
+      router.push("/login");
     }
-  }, [status, session]);
+  }, [status, router]);
 
-  // ✅ INITIAL PARALLEL FETCH (counts + first tab messages)
   useEffect(() => {
-    if (status !== "authenticated") return;
+    const username = (session?.user as any)?.username;
+    if (username && typeof window !== "undefined") {
+      setProfileUrl(`${window.location.origin}/u/${username}`);
+    }
+  }, [session]);
 
-    const fetchAll = async () => {
-      try {
-        setLoading(true);
-
-        const [normalRes, delayedRes] = await Promise.all([
-          axios.get("/api/message/n", { withCredentials: true }),
-          axios.get("/api/message/d", { withCredentials: true })
-        ]);
-
-        const normalMsgs = normalRes.data.data?.normalMessages || [];
-        const delayedMsgs = delayedRes.data.data?.delayedMessages || [];
-
-        setCounts({
-          normal: normalMsgs.length,
-          delayed: delayedMsgs.length
-        });
-
-        setMessages( normalMsgs );
-      } catch {
-        toast.error("Failed to load messages");
-      } finally {
-        setLoading(false);
+  useEffect(() => {
+    const fetchSettings = async () => {
+      if (status === "authenticated") {
+        try {
+          // Create this simple endpoint or use an existing user data endpoint
+          const { data } = await axios.get("/api/get-user-settings");
+          setAccepting(data.isAcceptingMessage);
+        } catch (error) {
+          // Fallback to session if API fails
+          setAccepting((session?.user as any).isAcceptingMessage ?? true);
+        }
       }
     };
 
-    fetchAll();
-  }, [status]);
+    fetchSettings();
+  }, [session, status]);
 
-  // ✅ TAB SWITCH FETCH (fresh data)
-  const fetchMessages = async (tabId: string) => {
+  const toggleAcceptMessages = async () => {
+    setUpdatingAccept(true);
     try {
-      setLoading(true);
+      const response = await axios.post("/api/accept-message", {
+        acceptMessages: !accepting,
+      });
 
-      const apiPath = TABS.find((t) => t.id === tabId)?.api;
+      if (response.data.success) {
+        setAccepting(!accepting);
+        toast.success(response.data.message);
+      }
+    } catch (error) {
+      toast.error("Failed to update status");
+    } finally {
+      setUpdatingAccept(false);
+    }
+  };
 
-      const { data } = await axios.get(apiPath!, { withCredentials: true });
+  const fetchMessages = async (tabId: string) => {
+    setLoading(true);
+    const apiPath = TABS.find((t) => t.id === tabId)?.api;
 
-      const fetched =
-        data.data?.normalMessages ||
-        data.data?.delayedMessages ||
-        [];
+    const manualToken = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+    const headers: any = {};
+    if (manualToken) {
+      headers["Authorization"] = `Bearer ${manualToken}`;
+    }
 
-      setMessages(fetched);
+    try {
+      const { data } = await axios.get(apiPath!, {
+        headers,
+        withCredentials: true
+      });
 
-      setCounts((prev) => ({
+      const fetchedMessages = data.data?.normalMessages || data.data?.delayedMessages || [];
+      setMessages(fetchedMessages);
+      setCounts(prev => ({
         ...prev,
-        [tabId]: fetched.length
+        [tabId]: fetchedMessages.length
       }));
-    } catch {
-      toast.error("Failed to refresh");
+
+    } catch (error: any) {
+      console.error("Fetch Error:", error.response?.data || error.message);
+      toast.error("Failed to load messages");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (status === "authenticated") fetchMessages(activeTab);
-  }, [activeTab]);
+    if (status === "authenticated") {
+      fetchMessages(activeTab);
+    }
+  }, [activeTab, status]);
 
-  // ✅ TOGGLE
-  const toggleAcceptMessages = async () => {
-    if (accepting === null) return;
-
-    const optimistic = !accepting;
-    setAccepting(optimistic);
-
+  const fetchCounts = async () => {
     try {
-      const { data } = await axios.patch(
-        "/api/accept-message",
-        {},
-        { withCredentials: true }
-      );
+      const [normalRes, delayedRes] = await Promise.all([
+        axios.get("/api/message/n"),
+        axios.get("/api/message/d")
+      ]);
 
-      setAccepting(data.data.isAcceptingMessage);
-    } catch {
-      setAccepting(!optimistic);
-      toast.error("Failed to update");
+      setCounts({
+        normal: normalRes.data.data?.normalMessages?.length || 0,
+        delayed: delayedRes.data.data?.delayedMessages?.length || 0
+      });
+    } catch (error) {
+      console.error("Error fetching counts", error);
     }
   };
+  useEffect(() => {
+    if (status === "authenticated") {
+      fetchCounts();
+    }
+  }, [status]);
 
   const copyLink = () => {
+    if (!profileUrl || profileUrl.includes("undefined")) {
+      return toast.error("Profile link not ready yet");
+    }
     navigator.clipboard.writeText(profileUrl);
-    toast.success("Link copied!");
+    toast.success("Capsule Link copied!");
   };
 
-  if (!mounted || status === "loading") return null;
+  if (!mounted || status === "loading") {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+        <Loader2 className="w-10 h-10 animate-spin text-neutral-400" />
+        <p className="text-neutral-500 font-medium">Loading your dashboard...</p>
+      </div>
+    );
+  }
+
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-8">
+    <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-8">
 
-      {/* 🔥 CONTROL CENTER */}
-      <div className="bg-gradient-to-br from-white to-neutral-50 border rounded-2xl p-6 shadow-sm space-y-6">
+      <div className="bg-gradient-to-br from-white to-neutral-50 border rounded-3xl p-6 shadow-sm space-y-6">
 
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-
           <div>
-            <h1 className="text-2xl font-bold">Dashboard</h1>
-            <p className="text-sm text-gray-500">
+            <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Dashboard</h1>
+            <p className="text-sm text-gray-500 mt-1">
               Share your link & manage incoming capsules
             </p>
           </div>
 
-          <div className="flex items-center gap-3 bg-white border px-4 py-2 rounded-xl">
+          {/* Status Toggle Box */}
+          <div className="flex items-center gap-4 bg-white border border-neutral-200 px-5 py-3 rounded-2xl shadow-sm">
+            <div className="flex items-center gap-3">
+              {accepting === null ? (
+                <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+              ) : accepting ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                  <span className="text-sm font-semibold text-gray-700">Receiving</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-gray-300 rounded-full" />
+                  <span className="text-sm font-semibold text-gray-400">Paused</span>
+                </div>
+              )}
+            </div>
 
-            {accepting === null ? (
-              <span className="text-sm text-gray-400">Loading...</span>
-            ) : accepting ? (
-              <>
-                <ShieldCheck className="text-green-600 w-4 h-4" />
-                <span className="text-sm font-medium">Receiving messages</span>
-              </>
-            ) : (
-              <>
-                <ShieldOff className="text-gray-400 w-4 h-4" />
-                <span className="text-sm font-medium">Paused</span>
-              </>
-            )}
+            <Separator orientation="vertical" className="h-6" />
 
-            {accepting !== null && (
+            <div className="flex items-center gap-2">
               <Switch
-                checked={accepting}
+                checked={accepting || false}
                 onCheckedChange={toggleAcceptMessages}
-                disabled={updatingAccept}
+                disabled={updatingAccept || accepting === null}
+                className="data-[state=checked]:bg-green-600"
               />
-            )}
+            </div>
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-2">
-          <div className="relative flex-grow">
-            <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+        {/* Link Sharing Row */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-grow group">
+            <LinkIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-black transition-colors" />
             <input
               readOnly
-              value={profileUrl}
-              className="w-full pl-10 pr-4 py-2 bg-neutral-100 border rounded-xl text-sm font-mono"
+              value={profileUrl || "Generating link..."}
+              className="w-full pl-11 pr-4 py-3 bg-neutral-100/50 border border-neutral-200 rounded-2xl text-sm font-mono text-gray-600 focus:outline-none focus:ring-2 focus:ring-black/5 transition-all"
             />
           </div>
 
-          <Button onClick={copyLink} className="rounded-xl">
+          <Button
+            onClick={copyLink}
+            className="bg-black text-white hover:bg-neutral-800 rounded-2xl px-8 h-[46px] transition-all active:scale-95"
+          >
             <Copy className="w-4 h-4 mr-2" />
-            Copy
+            Copy Link
           </Button>
         </div>
       </div>
 
-      <Separator />
+      <Separator className="opacity-50" />
 
-      {/* 🧭 TABS */}
-      <div className="flex justify-between items-center">
-
-        <div className="flex bg-neutral-100 p-1 rounded-xl border">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex bg-neutral-100 p-1.5 rounded-2xl border border-neutral-200">
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
+            // Get count for this specific tab
+            const count = tab.id === "normal" ? counts.normal : counts.delayed;
 
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className="relative px-4 py-2 text-sm font-medium"
+                className={`relative px-5 py-2.5 flex items-center gap-2 text-sm font-semibold transition-all duration-300 ${isActive ? "text-black" : "text-gray-500 hover:text-gray-700"
+                  }`}
               >
                 {isActive && (
                   <motion.div
-                    layoutId="activeTab"
-                    className="absolute inset-0 bg-white rounded-lg shadow-sm"
+                    layoutId="activeTabPill"
+                    className="absolute inset-0 bg-white rounded-xl shadow-sm border border-black/5"
+                    transition={{ type: "spring", bounce: 0.15, duration: 0.5 }}
                   />
                 )}
 
-                <span className="relative flex items-center gap-2">
-                  <Icon className="w-4 h-4" />
-                  {tab.label}
-                  <span className="text-xs text-gray-400">
-                    {counts[tab.id as "normal" | "delayed"]}
-                  </span>
+                <Icon className={`w-4 h-4 relative z-10 ${isActive ? "text-black" : "text-gray-400"}`} />
+
+                <span className="relative z-10">{tab.label}</span>
+
+                <span
+                  className={`relative z-10 ml-1 px-2 py-0.5 rounded-md text-[10px] font-bold transition-colors ${isActive
+                    ? " text-neutral-500"
+                    : " text-neutral-500"
+                    }`}
+                >
+                  {count}
                 </span>
               </button>
             );
@@ -235,59 +275,91 @@ export default function Dashboard() {
         </div>
 
         <Button
-          variant="outline"
+          variant="secondary"
           size="icon"
           onClick={() => fetchMessages(activeTab)}
+          disabled={loading}
+          className="rounded-2xl w-12 h-12 bg-white border shadow-sm hover:bg-neutral-50"
         >
-          <RefreshCcw className={loading ? "animate-spin w-4 h-4" : "w-4 h-4"} />
+          <RefreshCcw className={`w-5 h-5 text-gray-600 ${loading ? "animate-spin" : ""}`} />
         </Button>
       </div>
 
-      {/* 💌 MESSAGES */}
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <AnimatePresence mode="wait">
+          {messages.length > 0 ? (
+            messages.map((msg: any) => {
+              const locked = activeTab === "delayed" && !msg.isUnlocked;
 
-        {loading &&
-          Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-32 rounded-2xl bg-neutral-100 animate-pulse" />
-          ))}
+              return (
 
-        <AnimatePresence>
-          {!loading &&
-            messages.map((msg) => (
-              <motion.div
-                key={msg._id}
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className="p-[1px] rounded-2xl bg-gradient-to-br from-neutral-200 to-transparent"
-              >
-                <div className="p-5 bg-white rounded-2xl h-full flex flex-col justify-between hover:shadow-md transition">
-
-                  <p className="text-sm text-gray-800 line-clamp-4">
-                    {msg.content}
+                <motion.div
+                  key={msg._id}
+                  layout
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  className="group p-6 bg-white border border-neutral-200 rounded-3xl shadow-sm hover:shadow-md hover:border-neutral-300 transition-all flex flex-col justify-between min-h-[180px]"
+                >
+                  <p
+                    className={`text-gray-800 text-sm md:text-base leading-relaxed font-medium italic transition-all duration-300
+    ${locked ? "blur-sm select-none" : ""}
+    `}
+                  >
+                    "{msg.content}"
                   </p>
 
-                  <div className="text-xs text-gray-400 flex justify-between pt-4 border-t mt-4">
-                    <span>
-                      {new Date(msg.createdAt).toLocaleDateString()}
-                    </span>
-
-                    {activeTab === "delayed" && (
-                      <span className="text-amber-600 font-medium">
-                        Unlocks {new Date(msg.unlockDate).toLocaleDateString()}
+                  <div className="mt-6">
+                    {/* 👤 SENDER NAME SECTION */}
+                    <div className="mb-3 flex items-end gap-2">
+                      <div className="h-px flex-grow bg-neutral-100" />
+                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest bg-white px-2">
+                        From: {msg.senderName || "Anonymous"}
                       </span>
-                    )}
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-        </AnimatePresence>
+                      <div className="h-px flex-grow bg-neutral-100" />
+                    </div>
 
-        {!loading && messages.length === 0 && (
-          <div className="col-span-full text-center py-20 text-gray-400">
-            No capsules yet 📭
-          </div>
-        )}
+                    <div className="flex justify-between items-center">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Received</span>
+                        <span className="text-xs text-neutral-500 font-medium">
+                          {new Date(msg.createdAt).toLocaleDateString(undefined, {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric'
+                          })}
+                        </span>
+                      </div>
+
+                      {activeTab === "delayed" && (
+                        <div className="bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-100 flex flex-col items-end">
+                          <span className="block text-[8px] font-black text-amber-600 uppercase tracking-tighter">Unlocks On</span>
+                          <span className="text-[10px] text-amber-700 font-bold">
+                            {new Date(msg.unlockDate).toLocaleDateString()}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              )
+            })
+          ) : (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="col-span-full py-24 flex flex-col items-center justify-center text-center bg-neutral-50/50 rounded-3xl border border-dashed border-neutral-300"
+            >
+              <div className="bg-white p-4 rounded-full shadow-sm mb-4">
+                <Inbox className="w-8 h-8 text-neutral-300" />
+              </div>
+              <p className="text-gray-500 font-medium">
+                {loading ? "Decrypting your capsules..." : `No ${activeTab} messages yet.`}
+              </p>
+              <p className="text-xs text-neutral-400 mt-1">Share your link to get the conversation started!</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

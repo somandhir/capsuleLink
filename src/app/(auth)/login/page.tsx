@@ -37,32 +37,35 @@ export default function LoginPage() {
     });
 
     const onSubmit = async (data: FormValues) => {
-        setLoading(true);
-        const toastId = toast.loading("Checking credentials...");
+    setLoading(true);
+    const toastId = toast.loading("Checking credentials...");
 
-        try {
-            const res = await axios.post("/api/login", {
-                identifier: data.identifier, 
-                password: data.password,
-            });
+    try {
+        // Use NextAuth's signIn instead of axios
+        const result = await signIn("credentials", {
+            redirect: false,
+            identifier: data.identifier, // This can be email or username
+            password: data.password,
+        });
 
-            if (res.data.message === "Login successful") {
-                toast.success("Login successful!", { id: toastId });
-                router.push("/dashboard");
-            }
-        } catch (error: any) {
-            const errorMessage = error.response?.data?.message;
-
-            if (errorMessage === "not verified") {
+        if (result?.error) {
+            // Special handling for your verification logic
+            if (result.error === "not verified") {
                 toast.error("Please verify your account", { id: toastId });
                 router.push(`/verify/${data.identifier}`);
             } else {
-                toast.error(errorMessage || "Invalid credentials", { id: toastId });
+                toast.error(result.error || "Invalid credentials", { id: toastId });
             }
-        } finally {
-            setLoading(false);
+        } else {
+            toast.success("Login successful!", { id: toastId });
+            router.replace("/dashboard");
         }
-    };
+    } catch (error) {
+        toast.error("An unexpected error occurred", { id: toastId });
+    } finally {
+        setLoading(false);
+    }
+};
 
     const handleGoogleSignIn = () => {
         signIn("google", { callbackUrl: "/dashboard" });

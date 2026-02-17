@@ -28,7 +28,7 @@ export interface IUser {
   _id?: string;
   username: string;
   email: string;
-  passwordHash: string;
+  passwordHash?: string;
   avatar: string;
   verificationCode?: string;
   codeExpiry?: Date;

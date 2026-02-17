@@ -12,9 +12,9 @@ export async function GET(req: Request) {
     await dbConnect();
     const session = await getServerSession(authOptions);
     const payload = verifyJWT(req);
-    
+
     const idString = session?.user?._id || payload?._id || payload?.id;
-    
+
     if (!idString) {
       console.log("No user ID found in session or token");
       return NextResponse.json(
@@ -53,10 +53,17 @@ export async function GET(req: Request) {
           },
         },
       },
+      {
+        $addFields: {
+          isUnlocked: {
+            $gt: [new Date(), "$unlockDate"]
+          }
+        }
+      }
     ]);
-    
+
     console.log("Found delayed messages:", delayedMessages.length);
-    
+
     if (delayedMessages.length === 0) {
       return NextResponse.json(
         new ApiResponse(200, {}, "no delayed messages"),
