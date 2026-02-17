@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import AuthProvider from "@/context/AuthProvider";
 import { Toaster } from "sonner";
+import Navbar from "@/components/Navbar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,7 +31,15 @@ export default function RootLayout({
       suppressHydrationWarning
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AuthProvider> {children}</AuthProvider>
+       
+        <AuthProvider> 
+          <Navbar />
+          
+          {/* 2. Add a wrapper with padding-top so content isn't hidden under the fixed Navbar */}
+          <main className="pt-16">
+            {children}
+          </main>
+        </AuthProvider>
         <Toaster />
       </body>
     </html>
